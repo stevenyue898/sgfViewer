@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本地围棋打谱工具 (V0.3 修正版)</title>
+    <style>
+        :root {
+            --bg-color: #f4f4f4;
+            --board-color: #DCB35C;
+            --board-shadow: #8b6c42;
+            --text-color: #333;
+            --panel-bg: #fff;
+            --accent-color: #4a90e2;
+            --btn-hover: #357abd;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            height: 60px;
+            background-color: var(--panel-bg);
+            border-bottom:1px solid #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+
+        h1 { font-size: 1.2rem; font-weight: bold; color: #2c3e50; }
+
+        .file-input-wrapper { position: relative; overflow: hidden; display: inline-block; }
+
+        .btn {
+            background-color: var(--accent-color);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            border: none;
+            transition: background-color 0.2s;
+        }
+
+        .btn:hover { background-color: var(--btn-hover); }
+        .btn-secondary { background-color: #e0e0e0; color: #333; }
+        .btn-secondary:hover { background-color: #d0d0d0; }
+
+        input[type=file] {
+            font-size: 100px;
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        /* 主体布局 */
+        main {
+            flex: 1;
+            display: flex;
+            height: calc(100vh - 60px);
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .board-container {
+            flex: 2;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #e8e8e8;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+            overflow: auto;
+        }
+
+        canvas {
+            background-color: var(--board-color);
+            box-shadow: 5px 5px 15px var(--board-shadow);
+            border-radius: 2px;
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        /* 右侧面板 */
+        .info-panel {
+            flex: 1;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+        }
+
+        .panel-section {
+            background: var(--panel-bg);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .panel-title {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            color: #888;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+
+        .game-info-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 8px 15px;
+            font-size: 0.95rem;
+        }
+
+        .info-label { font-weight: 600; color: #555; text-align: right; }
+        .info-value { color: #222; }
+
+        .comment-box {
+            min-height: 100px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            color: #333;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #eee;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .controls .btn {
+            flex: 1;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 0;
+            min-width: 40px;
+        }
+
+        .branch-selector {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .branch-btn {
+            font-size: 0.8rem;
+            padding: 4px 8px;
+            min-width: 30px;
+            cursor: pointer;
+        }
+        .branch-btn.active {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .status-message {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #333;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 100;
+        }
+        .status-message.show { opacity: 1; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>SGF围棋打谱 V0.3 Stevenyue 2025.12</h1>
+    <div class="file-input-wrapper">
+        <button class="btn">📂 读入本地 SGF 文件</button>
+        <input type="file" id="fileInput" accept=".sgf">
+    </div>
+</header>
+
+<main>
+    <div class="board-container">
+        <canvas id="goBoard"></canvas>
+    </div>
+
+    <aside class="info-panel">
+        <div class="panel-section">
+            <div class="panel-title">对局信息</div>
+            <div class="game-info-grid">
+                <span class="info-label">棋盘:</span>
+                <span class="info-value" id="infoSize">19路</span>
+                <span class="info-label">比赛:</span>
+                <span class="info-value" id="infoEvent">-</span>
+                <span class="info-label">黑方:</span>
+                <span class="info-value" id="infoBlack">-</span>
+                <span class="info-label">白方:</span>
+                <span class="info-value" id="infoWhite">-</span>
+                <span class="info-label">结果:</span>
+                <span class="info-value" id="infoResult">-</span>
+                <span class="info-label">手数:</span>
+                <span class="info-value" id="infoMove">-</span>
+                <span class="info-label">贴目/让子:</span>
+                <span class="info-value" id="infoKomi">-</span>
+            </div>
+        </div>
+
+        <div class="panel-section" style="flex: 1; display: flex; flex-direction: column;">
+            <div class="panel-title">当前解说</div>
+            <div class="comment-box" id="moveComment">等待加载棋谱...</div>
+            
+            <div id="branchContainer" style="display:none; margin-top: 10px;">
+                <div class="branch-selector" id="branchButtons"></div>
+            </div>
+        </div>
+
+        <div class="panel-section">
+            <div class="panel-title">控制 (PgDn/PgUp/Home/End)</div>
+            <div class="controls">
+                <button class="btn btn-secondary" id="btnFirst">|&lt;</button>
+                <button class="btn btn-secondary" id="btnPrev">&lt;</button>
+                <button class="btn btn-secondary" id="btnNext">&gt;</button>
+                <button class="btn btn-secondary" id="btnLast">&gt;|</button>
+                <button class="btn btn-secondary" id="btnJudge" style="background-color: #e67e22;">⚖️ 形势判断</button>
+                <button class="btn btn-secondary" id="btnDeleteStone">🗑️ 删除死子</button>
+            </div>
+        </div>
+    </aside>
+</main>
+
+<div id="statusMsg" class="status-message"></div>
+
+<!-- 分支变化图解模态框 (改大改高清) -->
+<div id="branchModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 999; justify-content: center; align-items: center;">
+    <div style="background: white; padding: 20px; border-radius: 10px; max-width: 600px; width: 95%; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.6); text-align: center;">
+        <h3 style="margin-bottom: 20px; color: #333; border-bottom:1px solid #eee; padding-bottom: 10px;" id="branchModalTitle">分支变化图解</h3>
+        <div id="branchPreviews" style="display: flex; justify-content: center; margin-bottom: 20px;">
+            <!-- 动态生成 500x500 的高清大棋盘 -->
+        </div>
+        <div style="margin-bottom: 20px; color: #555; font-size: 0.9rem;">
+            <p>高清定式图解模式</p>
+            <p>数字表示该变化的落子顺序。</p>
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: center; border-top: 1px solid #eee; padding-top: 20px;">
+            <button class="btn btn-secondary" onclick="window.app.switchFromModal()" style="width: 200px;">切换至此变化</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('branchModal').style.display='none'" style="width: 100px;">关闭</button>
+        </div>
+    </div>
+</div>
+
+<!-- 形势判断模态框 -->
+<div id="judgeModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 998; justify-content: center; align-items: center;">
+    <div style="background: white; padding: 30px; border-radius: 10px; max-width: 400px; width: 90%; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
+        <h3 style="margin-bottom: 20px; color: #333;">盘面形势分析 (智能算法)</h3>
+        <div id="judgeContent" style="margin-bottom: 20px; font-size: 1rem; line-height: 1.6; color: #555;"></div>
+        <button class="btn" onclick="document.getElementById('judgeModal').style.display='none'" style="width: 100%;">关闭</button>
+    </div>
+</div>
+
+<script>
+// --- 1. SGF 解析器 (健壮版) ---
+class SGFParser {
+    constructor() { this.text = ""; this.pos = 0; }
+    parse(sgfText) {
+        try {
+            this.text = sgfText.replace(/[\t\r\n]/g, ''); this.pos = 0;
+            if (!this.text.startsWith('(')) throw new Error("SGF 格式无效");
+            const virtualRoot = { properties: {}, parent: null, children: [] };
+            this.parseTree(virtualRoot);
+            if (virtualRoot.children.length > 0) return virtualRoot.children[0];
+            throw new Error("未找到任何棋谱节点");
+        } catch (e) { console.error(e); throw e; }
+    }
+    parseTree(parentNode) {
+        if (this.text[this.pos] !== '(') return; this.pos++; this.parseSequence(parentNode);
+        if (this.text[this.pos] === ')') this.pos++;
+    }
+    parseSequence(parentNode) {
+        let lastNode = parentNode;
+        while (this.pos < this.text.length && this.text[this.pos] !== ')') {
+            if (this.text[this.pos] === ';') {
+                const node = this.parseNode();
+                if (node) {
+                    node.parent = lastNode;
+                    lastNode.children.push(node);
+                    lastNode = node;
+                    while (this.pos < this.text.length && this.text[this.pos] === '(') this.parseTree(lastNode);
+                }
+            } else if (this.text[this.pos] === '(') {
+                this.parseTree(parentNode);
+            } else { this.pos++; }
+        }
+    }
+    parseNode() {
+        if (this.text[this.pos] !== ';') return null; this.pos++;
+        const node = { properties: {}, parent: null, children: [] };
+        while (this.pos < this.text.length) {
+            const char = this.text[this.pos];
+            if (char === ';' || char === '(' || char === ')') break;
+            if (/[A-Z]/.test(char)) {
+                let propName = "";
+                while (this.pos < this.text.length && /[A-Z]/.test(this.text[this.pos])) propName += this.text[this.pos++];
+                const values = [];
+                while (this.pos < this.text.length && this.text[this.pos] === '[') {
+                    const val = this.parseValue();
+                    if (val !== null) values.push(val);
+                }
+                if (values.length > 0) node.properties[propName] = values;
+            } else { this.pos++; }
+        }
+        return node;
+    }
+    parseValue() {
+        if (this.text[this.pos] !== '[') return null; this.pos++;
+        let val = "";
+        while (this.pos < this.text.length && this.text[this.pos] !== ']') {
+            if (this.text[this.pos] === '\\' && this.pos + 1 < this.text.length) { val += this.text[this.pos + 1]; this.pos += 2; } 
+            else { val += this.text[this.pos++]; }
+        }
+        if (this.pos < this.text.length && this.text[this.pos] === ']') this.pos++;
+        return val;
+    }
+}
+
+// --- 2. 围棋逻辑引擎 ---
+class GoEngine {
+    constructor(size = 19) {
+        this.size = size;
+        this.EMPTY = 0; this.BLACK = 1; this.WHITE = 2;
+    }
+    createBoard() {
+        return Array.from({ length: this.size }, () => Array(this.size).fill(this.EMPTY));
+    }
+    getStone(board, x, y) {
+        if (x < 0 || x >= this.size || y < 0 || y >= this.size) return -1;
+        return board[y][x];
+    }
+    getGroup(board, x, y) {
+        const color = board[y][x];
+        if (color === this.EMPTY) return [];
+        const group = []; const visited = new Set(); const queue = [{x, y}];
+        visited.add(`${x},${y}`);
+        while (queue.length > 0) {
+            const curr = queue.pop(); group.push(curr);
+            const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+            for (let d of dirs) {
+                const nx = curr.x + d[0]; const ny = curr.y + d[1];
+                if (this.getStone(board, nx, ny) === color && !visited.has(`${nx},${ny}`)) { visited.add(`${nx},${ny}`); queue.push({x: nx, y: ny}); }
+            }
+        }
+        return group;
+    }
+    countLiberties(board, group) {
+        const liberties = new Set();
+        for (let stone of group) {
+            const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+            for (let d of dirs) {
+                const nx = stone.x + d[0]; const ny = stone.y + d[1];
+                if (this.getStone(board, nx, ny) === this.EMPTY) liberties.add(`${nx},${ny}`);
+            }
+        }
+        return liberties.size;
+    }
+    play(board, x, y, color) {
+        const newBoard = board.map(row => [...row]);
+        if (x < 0 || y < 0 || x >= this.size || y >= this.size) return { board: newBoard, captured: [] };
+        newBoard[y][x] = color;
+        const opponent = color === this.BLACK ? this.WHITE : this.BLACK;
+        const capturedStones = []; const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+        for (let d of dirs) {
+            const nx = x + d[0]; const ny = y + d[1];
+            if (this.getStone(newBoard, nx, ny) === opponent) {
+                const group = this.getGroup(newBoard, nx, ny);
+                if (this.countLiberties(newBoard, group) === 0) {
+                    for (let s of group) { newBoard[s.y][s.x] = this.EMPTY; capturedStones.push(s); }
+                }
+            }
+        }
+        if (capturedStones.length === 0) {
+            const myGroup = this.getGroup(newBoard, x, y);
+            if (this.countLiberties(newBoard, myGroup) === 0) {
+                for (let s of myGroup) { newBoard[s.y][s.x] = this.EMPTY; }
+            }
+        }
+        return { board: newBoard, captured: capturedStones };
+    }
+}
+
+// --- 3. 主程序 ---
+class App {
+    constructor() {
+        this.canvas = document.getElementById('goBoard');
+        this.ctx = this.canvas.getContext('2d');
+        this.parser = new SGFParser();
+        this.engine = new GoEngine(19);
+        
+        this.rootNode = null;
+        this.boardSize = 19;
+        this.history = []; 
+        this.boardState = null;
+        this.territoryMap = null;
+        this.isDeleteMode = false;
+        
+        // 用于弹窗跳转的临时节点
+        this.tempBranchNode = null;
+
+        this.initCanvas();
+        this.bindEvents();
+        this.reset();
+    }
+
+    reset() {
+        this.rootNode = null;
+        this.history = [];
+        this.boardSize = 19;
+        this.engine.size = 19;
+        this.boardState = this.engine.createBoard();
+        this.updateInfoPanel('-');
+        this.drawBoard();
+    }
+
+    initCanvas() {
+        const dpr = window.devicePixelRatio || 1;
+        const size = 600; 
+        this.canvas.width = size * dpr;
+        this.canvas.height = size * dpr;
+        this.canvas.style.width = `${size}px`;
+        this.canvas.style.height = `${size}px`;
+        this.ctx.scale(dpr, dpr);
+        this.boardPixelSize = size;
+        this.recalcGridSize();
+    }
+
+    recalcGridSize() {
+        this.gridSize = this.boardPixelSize / (this.boardSize + 1); 
+        this.padding = this.gridSize;
+        this.stoneRadius = this.gridSize * 0.45;
+    }
+
+    bindEvents() {
+        document.getElementById('fileInput').addEventListener('change', (e) => this.handleFileLoad(e));
+        document.getElementById('btnFirst').addEventListener('click', () => this.goToFirst());
+        document.getElementById('btnLast').addEventListener('click', () => this.goToLast());
+        document.getElementById('btnPrev').addEventListener('click', () => this.stepPrev());
+        document.getElementById('btnNext').addEventListener('click', () => this.stepNext());
+        document.getElementById('btnJudge').addEventListener('click', () => this.judgeStatus());
+        document.getElementById('btnDeleteStone').addEventListener('click', () => this.toggleDeleteMode());
+        this.canvas.addEventListener('mousedown', (e) => this.handleBoardClick(e));
+        
+        // V3.9 修正：添加正确的快捷键监听
+        document.addEventListener('keydown', (e) => {
+            // 阻止默认滚动行为
+            if (['PageDown', 'PageUp', 'Home', 'End', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+            }
+
+            if (e.key === 'PageDown' || e.key === 'ArrowDown' || e.key === 'ArrowRight') { 
+                this.stepNext(); 
+            } else if (e.key === 'PageUp' || e.key === 'ArrowUp' || e.key === 'ArrowLeft') { 
+                this.stepPrev(); 
+            } else if (e.key === 'Home') { 
+                this.goToFirst(); 
+            } else if (e.key === 'End') { 
+                this.goToLast(); 
+            }
+        });
+    }
+
+    handleFileLoad(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const sgfText = e.target.result;
+                const root = this.parser.parse(sgfText);
+                if (root) { this.loadGame(root); showToast("棋谱加载成功"); } 
+                else { throw new Error("解析返回空结果"); }
+            } catch (err) {
+                console.error("加载失败:", err);
+                showToast("加载失败: " + err.message);
+                this.reset();
+            }
+            event.target.value = ''; 
+        };
+        reader.readAsText(file);
+    }
+
+    loadGame(root) {
+        this.rootNode = root;
+        this.history = [root]; 
+        this.currentNode = root;
+        
+        this.goToLastSilent();
+
+        const sz = root.properties['SZ'];
+        if (sz) {
+            const size = parseInt(sz[0]);
+            if (!isNaN(size) && size > 0 && size < 26) {
+                this.boardSize = size;
+                this.engine.size = size;
+                this.recalcGridSize();
+            }
+        }
+        document.getElementById('infoSize').textContent = `${this.boardSize}路`;
+        
+        // 修复：加载时更新对局信息
+        this.updateGameInfo(this.currentNode);
+        
+        this.updateUI();
+    }
+
+    calculateBoardState(nodePath) {
+        if (!nodePath || nodePath.length === 0) return this.engine.createBoard();
+        
+        let board = this.engine.createBoard();
+        
+        for (const node of nodePath) {
+            const props = node.properties;
+            if (props['AB']) props['AB'].forEach(coord => { const [x, y] = this.sgfToCoord(coord); if (x >= 0 && y >= 0) board[y][x] = this.engine.BLACK; });
+            if (props['AW']) props['AW'].forEach(coord => { const [x, y] = this.sgfToCoord(coord); if (x >= 0 && y >= 0) board[y][x] = this.engine.WHITE; });
+            if (props['B']) {
+                const [x, y] = this.sgfToCoord(props['B'][0]);
+                if (x >= 0 && y >= 0) {
+                    const res = this.engine.play(board, x, y, this.engine.BLACK);
+                    board = res.board;
+                }
+            } else if (props['W']) {
+                const [x, y] = this.sgfToCoord(props['W'][0]);
+                if (x >= 0 && y >= 0) {
+                    const res = this.engine.play(board, x, y, this.engine.WHITE);
+                    board = res.board;
+                }
+            }
+        }
+        return board;
+    }
+
+    recalculateBoard() {
+        this.boardState = this.calculateBoardState(this.history);
+    }
+
+    updateUI() {
+        this.recalculateBoard();
+        this.drawBoard();
+        
+        const currentNode = this.history[this.history.length - 1];
+        const comment = currentNode.properties['C'] ? currentNode.properties['C'][0] : '';
+        document.getElementById('moveComment').textContent = comment || "此手无解说。";
+
+        let moveCount = 0;
+        for (let node of this.history) {
+            if (node.properties['B'] || node.properties['W']) moveCount++;
+        }
+        document.getElementById('infoMove').textContent = moveCount > 0 ? `${moveCount} 手` : '-';
+
+        const branchContainer = document.getElementById('branchContainer');
+        const branchBtns = document.getElementById('branchButtons');
+        branchBtns.innerHTML = '';
+        
+        if (currentNode.parent && currentNode.parent.children.length > 1) {
+            branchContainer.style.display = 'block';
+            
+            currentNode.parent.children.forEach((sibling, index) => {
+                const btn = document.createElement('button');
+                btn.className = `btn btn-secondary branch-btn ${sibling === currentNode ? 'active' : ''}`;
+                btn.textContent = sibling.properties['N'] ? sibling.properties['N'][0].substring(0,4) : `分支${index+1}`;
+                // 点击打开单图变化演示
+                btn.onclick = () => this.showBranchPreview(sibling, sibling.properties['N'] ? sibling.properties['N'][0] : `分支 ${index+1}`);
+                branchBtns.appendChild(btn);
+            });
+        } else {
+            branchContainer.style.display = 'none';
+        }
+    }
+    
+    // 构建到目标节点的完整历史路径（支持跨分支深层跳转）
+    buildPathToNode(targetNode) {
+        if (!targetNode) return [];
+        const path = [];
+        let curr = targetNode;
+        while(curr) {
+            path.unshift(curr);
+            curr = curr.parent;
+        }
+        return path;
+    }
+    
+    // 跳转到指定节点（用于预览中选择某一步）
+    jumpToNode(node) {
+        if (!node) return;
+        this.history = this.buildPathToNode(node);
+        this.updateUI();
+        document.getElementById('branchModal').style.display = 'none';
+        showToast("已跳转至选定变化");
+    }
+
+    // 从弹窗切换到选定的分支
+    switchFromModal() {
+        if (this.tempBranchNode) {
+            this.jumpToNode(this.tempBranchNode);
+            showToast("已切换到此变化");
+        }
+    }
+
+    jumpToNode(node) {
+        if (!node) return;
+        this.history = this.buildPathToNode(node);
+        this.updateUI();
+    }
+
+    // 核心功能：显示分支全流程预览
+    showBranchPreview(startNode, branchName) {
+        this.tempBranchNode = startNode; // 记录当前预览的分支，用于切换
+        const container = document.getElementById('branchPreviews');
+        container.innerHTML = '';
+        document.getElementById('branchModalTitle').textContent = `"${branchName}" 变化图解`;
+
+        // 1. 计算该分支主线上的所有落子步骤
+        const moves = [];
+        let temp = startNode;
+        let stepCount = 1;
+        
+        while(temp) {
+            const props = temp.properties;
+            let moveCoord = null;
+            let color = null;
+            
+            if (props['B']) { moveCoord = this.sgfToCoord(props['B'][0]); color = 1; }
+            else if (props['W']) { moveCoord = this.sgfToCoord(props['W'][0]); color = 2; }
+
+            if (moveCoord && moveCoord[0] !== -1) {
+                moves.push({x: moveCoord[0], y: moveCoord[1], color: color, step: stepCount});
+                stepCount++;
+            }
+            temp = temp.children[0]; // 一直走主分支
+        }
+
+        // 2. 创建大棋盘 Canvas (500x500) + DPR缩放
+        const canvas = document.createElement('canvas');
+        const cssSize = 500;
+        const dpr = window.devicePixelRatio || 1;
+        
+        canvas.width = cssSize * dpr;
+        canvas.height = cssSize * dpr;
+        canvas.style.width = `${cssSize}px`;
+        canvas.style.height = `${cssSize}px`;
+        
+        // 关键：设置 context 的缩放，保证高清
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+        
+        // 3. 计算棋盘状态：走到该分支最后一步
+        // 路径 = [Root ... -> Parent -> ... -> LastMove]
+        // 简便方法：构建到该分支最后节点的完整路径
+        let lastNode = startNode;
+        while(lastNode.children && lastNode.children.length > 0) lastNode = lastNode.children[0];
+        
+        const fullPath = this.buildPathToNode(lastNode);
+        const finalBoardState = this.calculateBoardState(fullPath);
+        
+        // 4. 绘制带数字的棋盘
+        this.drawNumberedBoardHighDef(ctx, cssSize, finalBoardState, moves);
+        
+        container.appendChild(canvas);
+        document.getElementById('branchModal').style.display = 'flex';
+    }
+
+    // 专用：高清定式图绘制 (白色书页风格)
+    drawNumberedBoardHighDef(ctx, size, boardState, moves) {
+        const grid = size / (this.boardSize + 1);
+        const pad = grid;
+        
+        ctx.clearRect(0, 0, size, size);
+        
+        // 1. 背景：纯白书页风格
+        ctx.fillStyle = '#FFFFFF'; 
+        ctx.fillRect(0, 0, size, size);
+        
+        // 2. 网格：纯黑 (模拟印刷墨迹)
+        ctx.strokeStyle = '#000000'; 
+        ctx.lineWidth = 0.8; // 线条稍粗一点，更清晰
+        ctx.beginPath();
+        for(let i=0; i<this.boardSize; i++) {
+            const pos = pad + i*grid;
+            ctx.moveTo(pad, pos); ctx.lineTo(size-pad, pos);
+            ctx.moveTo(pos, pad); ctx.lineTo(pos, size-pad);
+        }
+        ctx.stroke();
+
+        // 3. 星位
+        const stars = [];
+        if (this.boardSize === 19) stars.push(3, 9, 15);
+        else if (this.boardSize === 13) stars.push(3, 6, 9);
+        else if (this.boardSize === 9) stars.push(2, 4, 6);
+        
+        if (stars.length > 0) {
+            ctx.fillStyle = '#000000';
+            for (let r of stars) {
+                for (let c of stars) {
+                    ctx.beginPath(); 
+                    ctx.arc(pad + c * grid, pad + r * grid, grid * 0.1, 0, Math.PI * 2); 
+                    ctx.fill();
+                }
+            }
+        }
+
+        // 4. 棋子 (书页风格：纯黑棋 + 带描边的白棋)
+        for(let y=0; y<this.boardSize; y++) {
+            for(let x=0; x<this.boardSize; x++) {
+                const color = boardState[y][x];
+                if(color !== 0) {
+                    const cx = pad + x*grid;
+                    const cy = pad + y*grid;
+                    const r = grid * 0.45;
+                    
+                    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+                    
+                    if (color === 1) {
+                        // 黑棋：纯黑
+                        ctx.fillStyle = '#000000';
+                        ctx.fill();
+                    } else {
+                        // 白棋：纯白 + 黑色描边 (为了在白背景上可见)
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fill();
+                        ctx.strokeStyle = '#000000';
+                        ctx.lineWidth = 1.5;
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+        
+        // 5. 数字 (清晰、加粗)
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = `bold ${grid * 0.55}px Arial`;
+        
+        moves.forEach(m => {
+            const cx = pad + m.x * grid;
+            const cy = pad + m.y * grid;
+            
+            // 黑棋上白字，白棋上黑字
+            ctx.fillStyle = m.color === 1 ? '#FFFFFF' : '#000000';
+            // 绘制文字阴影增加对比度
+            if (m.color === 2) { // 白棋，文字是黑色，加白色描边背景
+                 ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+                 ctx.lineWidth = 3;
+                 ctx.strokeText(m.step, cx, cy);
+            }
+            ctx.fillText(m.step, cx, cy);
+        });
+    }
+
+    switchBranch(targetNode) {
+        if (!targetNode) return;
+        this.jumpToNode(targetNode);
+    }
+
+    stepNext() {
+        if (!this.currentNode) return;
+        this.territoryMap = null;
+        const current = this.history[this.history.length - 1];
+        let next = null;
+        if (current.children.length > 0) {
+            next = current.children[0];
+        }
+        
+        if (next) {
+            this.history.push(next);
+            this.updateUI();
+        } else {
+            showToast("已是最后一手");
+        }
+    }
+
+    stepPrev() {
+        if (!this.currentNode) return;
+        this.territoryMap = null;
+        
+        if (this.history.length > 1) {
+            this.history.pop();
+            this.updateUI();
+        } else {
+            showToast("已是第一手");
+        }
+    }
+
+    goToFirst() {
+        this.territoryMap = null;
+        if (this.rootNode) {
+            this.history = [this.rootNode];
+            this.updateUI();
+        }
+    }
+
+    goToLast() {
+        this.territoryMap = null;
+        if (this.history.length > 0) {
+            let tempHistory = [...this.history];
+            let node = tempHistory[tempHistory.length - 1];
+            while (node.children && node.children.length > 0) {
+                node = node.children[0];
+                tempHistory.push(node);
+            }
+            this.history = tempHistory;
+            this.updateUI();
+        }
+    }
+
+    goToLastSilent() {
+        let node = this.rootNode;
+        this.history = [node];
+        while (node.children && node.children.length > 0) {
+            node = node.children[0];
+            this.history.push(node);
+        }
+    }
+
+    toggleDeleteMode() {
+        this.isDeleteMode = !this.isDeleteMode;
+        const btn = document.getElementById('btnDeleteStone');
+        if (this.isDeleteMode) {
+            btn.style.backgroundColor = '#e74c3c'; btn.style.color = 'white'; btn.textContent = '❌ 点击删除棋子';
+            this.canvas.style.cursor = 'pointer'; showToast("已开启删除模式");
+        } else {
+            btn.style.backgroundColor = ''; btn.style.color = ''; btn.textContent = '🗑️ 删除死子';
+            this.canvas.style.cursor = 'default'; showToast("已退出删除模式");
+        }
+    }
+
+    handleBoardClick(e) {
+        if (!this.isDeleteMode || !this.boardState) return;
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left; const y = e.clientY - rect.top;
+        const col = Math.round((x - this.padding) / this.gridSize);
+        const row = Math.round((y - this.padding) / this.gridSize);
+        if (col >= 0 && col < this.boardSize && row >= 0 && row < this.boardSize) {
+            if (this.boardState[row][col] !== 0) {
+                this.boardState[row][col] = 0;
+                this.drawBoard();
+            }
+        }
+    }
+
+    updateInfoPanel(result) {
+        document.getElementById('infoEvent').textContent = '-';
+        document.getElementById('infoBlack').textContent = '-';
+        document.getElementById('infoWhite').textContent = '-';
+        document.getElementById('infoResult').textContent = result;
+        document.getElementById('moveComment').textContent = '等待加载棋谱...';
+        document.getElementById('infoMove').textContent = '-';
+        document.getElementById('infoKomi').textContent = '-';
+        document.getElementById('branchContainer').style.display = 'none';
+    }
+    
+    updateGameInfo(node) {
+        const props = node.properties;
+        const getVal = (key) => props[key] ? props[key][0] : '-';
+        document.getElementById('infoEvent').textContent = getVal('EV') || getVal('EVENT');
+        document.getElementById('infoBlack').textContent = (getVal('PB') || getVal('BLACK')) + (getVal('BR') ? ` (${getVal('BR')})` : '');
+        document.getElementById('infoWhite').textContent = (getVal('PW') || getVal('WHITE')) + (getVal('WR') ? ` (${getVal('WR')})` : '');
+        document.getElementById('infoResult').textContent = getVal('RE') || getVal('RESULT');
+        const komi = getVal('KM');
+        const handicap = getVal('HA');
+        let komiText = komi;
+        if (handicap && handicap !== '-' && parseInt(handicap) > 0) komiText += ` (让子 ${handicap})`;
+        document.getElementById('infoKomi').textContent = komiText || '-';
+    }
+
+    sgfToCoord(s) {
+        if (!s || s.length < 2) return [-1, -1];
+        const x = s.charCodeAt(0) - 97;
+        const sgfY = s.charCodeAt(1) - 97;
+        const y = this.boardSize - 1 - sgfY; 
+        if (x < 0 || x >= this.boardSize || y < 0 || y >= this.boardSize) return [-1, -1];
+        return [x, y];
+    }
+
+    judgeStatus() {
+        if (!this.boardState) return;
+        let blackStones = 0; let whiteStones = 0;
+        const size = this.boardSize;
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                if (this.boardState[y][x] === this.engine.BLACK) blackStones++;
+                else if (this.boardState[y][x] === this.engine.WHITE) whiteStones++;
+            }
+        }
+        const visited = new Set();
+        let blackTerritory = 0; let whiteTerritory = 0;
+        this.territoryMap = Array.from({ length: this.boardSize }, () => Array(this.boardSize).fill(0));
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                if (this.boardState[y][x] === this.engine.EMPTY && !visited.has(`${x},${y}`)) {
+                    const region = []; const queue = [{x, y}]; visited.add(`${x},${y}`);
+                    let blackContacts = 0; let whiteContacts = 0;
+                    while (queue.length > 0) {
+                        const curr = queue.pop(); region.push(curr);
+                        const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+                        for (let d of dirs) {
+                            const nx = curr.x + d[0]; const ny = curr.y + d[1];
+                            if (nx < 0 || nx >= size || ny < 0 || ny >= size) continue;
+                            const color = this.boardState[ny][nx];
+                            if (color === this.engine.EMPTY) {
+                                if (!visited.has(`${nx},${ny}`)) { visited.add(`${nx},${ny}`); queue.push({x: nx, y: ny}); }
+                            } else if (color === this.engine.BLACK) blackContacts++;
+                            else if (color === this.engine.WHITE) whiteContacts++;
+                        }
+                    }
+                    if (blackContacts > 0 && whiteContacts === 0) {
+                        region.forEach(p => { this.territoryMap[p.y][p.x] = 1; }); blackTerritory += region.length;
+                    } else if (whiteContacts > 0 && blackContacts === 0) {
+                        region.forEach(p => { this.territoryMap[p.y][p.x] = 2; }); whiteTerritory += region.length;
+                    } else if (blackContacts > 0 && whiteContacts > 0) {
+                        const ratio = blackContacts / whiteContacts;
+                        if (ratio > 2.0) { region.forEach(p => { this.territoryMap[p.y][p.x] = 1; }); blackTerritory += region.length; }
+                        else if (ratio < 0.5) { region.forEach(p => { this.territoryMap[p.y][p.x] = 2; }); whiteTerritory += region.length; }
+                    }
+                }
+            }
+        }
+        const blackTotal = blackStones + blackTerritory;
+        const whiteTotal = whiteStones + whiteTerritory;
+        const diff = blackTotal - whiteTotal;
+        let sResult = "未知";
+        if (this.rootNode && this.rootNode.properties['RE']) {
+            sResult = this.rootNode.properties['RE'][0];
+            if (sResult === 'B+R') sResult = "黑中盘胜"; if (sResult === 'W+R') sResult = "白中盘胜";
+        }
+        const content = `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                <div style="background: #f0f0f0; padding: 10px; border-radius: 5px;">
+                    <div style="font-weight: bold; color: #333;">黑方</div>
+                    <div style="font-size: 1.2rem;">${blackTotal} <span style="font-size: 0.8rem;">(子${blackStones} + 空${blackTerritory})</span></div>
+                </div>
+                <div style="background: #f0f0f0; padding: 10px; border-radius: 5px;">
+                    <div style="font-weight: bold; color: #333;">白方</div>
+                    <div style="font-size: 1.2rem;">${whiteTotal} <span style="font-size: 0.8rem;">(子${whiteStones} + 空${whiteTerritory})</span></div>
+                </div>
+            </div>
+            <div style="font-size: 1.1rem; font-weight: bold;">
+                盘面差: ${diff > 0 ? '黑领先 ' + diff : '白领先 ' + Math.abs(diff)}
+            </div>
+            <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
+                <strong>SGF 记录结果:</strong> ${sResult}
+            </div>
+        `;
+        document.getElementById('judgeContent').innerHTML = content;
+        document.getElementById('judgeModal').style.display = 'flex';
+        this.drawBoard();
+    }
+	
+    drawBoard() {
+        const ctx = this.ctx;
+        const sz = this.boardPixelSize;
+        const pad = this.padding;
+        const grid = this.gridSize;
+        ctx.clearRect(0, 0, sz, sz);
+
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.beginPath();
+        for (let i = 0; i < this.boardSize; i++) {
+            const pos = pad + i * grid;
+            ctx.moveTo(pad, pos); ctx.lineTo(sz - pad, pos);
+            ctx.moveTo(pos, pad); ctx.lineTo(pos, sz - pad);
+        }
+        ctx.stroke();
+
+        const stars = [];
+        if (this.boardSize === 19) stars.push(3, 9, 15);
+        else if (this.boardSize === 13) stars.push(3, 6, 9);
+        else if (this.boardSize === 9) stars.push(2, 4, 6);
+        if (stars.length > 0) {
+            ctx.fillStyle = '#000';
+            for (let r of stars) {
+                for (let c of stars) {
+                    ctx.beginPath(); ctx.arc(pad + c * grid, pad + r * grid, 3, 0, Math.PI * 2); ctx.fill();
+                }
+            }
+        }
+
+        ctx.fillStyle = '#333'; ctx.font = '10px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const letters = 'ABCDEFGHJKLMNOPQRST'.slice(0, this.boardSize);
+        for (let i = 0; i < this.boardSize; i++) {
+            const pos = pad + i * grid;
+            const char = letters[i];
+            ctx.fillText(char, pos, pad - 12); ctx.fillText(char, pos, sz - pad + 12);
+            ctx.fillText(this.boardSize - i, pad - 12, pos); ctx.fillText(this.boardSize - i, sz - pad + 12, pos);
+        }
+
+        for (let y = 0; y < this.boardSize; y++) {
+            for (let x = 0; x < this.boardSize; x++) {
+                if (this.boardState[y][x] !== 0) this.drawStone(x, y, this.boardState[y][x]);
+            }
+        }
+
+        if (this.territoryMap) {
+            ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            for (let y = 0; y < this.boardSize; y++) {
+                for (let x = 0; x < this.boardSize; x++) {
+                    const val = this.territoryMap[y][x]; if (val === 0) continue;
+                    const cx = pad + x * grid; const cy = pad + y * grid;
+                    if (val === 1) { ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; ctx.fillText('#', cx, cy); } 
+                    else if (val === 2) { 
+                        ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 2; ctx.strokeText('#', cx, cy);
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'; ctx.fillText('#', cx, cy);
+                    }
+                }
+            }
+        }
+
+        this.drawMarkup();
+
+        if (this.history.length > 1) {
+            const currentNode = this.history[this.history.length - 1];
+            const props = currentNode.properties;
+            let moveCoord = null;
+            if (props['B']) moveCoord = this.sgfToCoord(props['B'][0]);
+            else if (props['W']) moveCoord = this.sgfToCoord(props['W'][0]);
+            if (moveCoord && moveCoord[0] !== -1) {
+                const cx = pad + moveCoord[0] * grid; const cy = pad + moveCoord[1] * grid;
+                ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 2; ctx.beginPath();
+                const r = this.stoneRadius * 0.55; 
+                ctx.moveTo(cx, cy - r); ctx.lineTo(cx - r * 0.866, cy + r * 0.5); ctx.lineTo(cx + r * 0.866, cy + r * 0.5); ctx.closePath();
+                ctx.stroke();
+            }
+        }
+    }
+
+    drawStone(x, y, color) {
+        const ctx = this.ctx;
+        const cx = this.padding + x * this.gridSize; const cy = this.padding + y * this.gridSize; const r = this.stoneRadius;
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.4)'; ctx.shadowBlur = 4; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2;
+        if (color === this.engine.BLACK) {
+            const grad = ctx.createRadialGradient(cx - r/3, cy - r/3, r/4, cx, cy, r);
+            grad.addColorStop(0, '#444'); grad.addColorStop(1, '#000'); ctx.fillStyle = grad;
+        } else {
+            const grad = ctx.createRadialGradient(cx - r/3, cy - r/3, r/4, cx, cy, r);
+            grad.addColorStop(0, '#fff'); grad.addColorStop(1, '#dcdcdc'); ctx.fillStyle = grad;
+        }
+        ctx.fill(); ctx.shadowColor = 'transparent';
+    }
+
+    drawMarkup() {
+        if (this.history.length === 0) return;
+        const currentNode = this.history[this.history.length - 1];
+        const props = currentNode.properties;
+        const ctx = this.ctx; const pad = this.padding; const grid = this.gridSize;
+
+        if (props['LB']) {
+            ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            props['LB'].forEach(item => {
+                const colonIndex = item.indexOf(':'); if (colonIndex === -1) return;
+                const coordStr = item.substring(0, colonIndex); const labelText = item.substring(colonIndex + 1);
+                const [x, y] = this.sgfToCoord(coordStr); if (x === -1) return;
+                const cx = pad + x * grid; const cy = pad + y * grid;
+                const bgWidth = Math.max(20, ctx.measureText(labelText).width + 8);
+                ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(cx - bgWidth/2, cy - 8, bgWidth, 16);
+                ctx.fillStyle = '#e74c3c'; ctx.fillText(labelText, cx, cy);
+            });
+        }
+
+        const markColor = '#e74c3c'; const markSize = grid * 0.4;
+        const drawShapeAt = (coordStr, type) => {
+            const [x, y] = this.sgfToCoord(coordStr); if (x === -1) return;
+            const cx = pad + x * grid; const cy = pad + y * grid;
+            ctx.strokeStyle = markColor; ctx.lineWidth = 2; ctx.beginPath();
+            if (type === 'TR') {
+                const h = markSize * Math.sqrt(3) / 2;
+                ctx.moveTo(cx, cy - markSize); ctx.lineTo(cx - markSize * 0.866, cy + markSize * 0.5); ctx.lineTo(cx + markSize * 0.866, cy + markSize * 0.5); ctx.closePath();
+            } else if (type === 'CR') {
+                ctx.arc(cx, cy, markSize * 0.8, 0, Math.PI * 2);
+            } else if (type === 'SQ') {
+                const half = markSize * 0.8; ctx.rect(cx - half, cy - half, half * 2, half * 2);
+            } else if (type === 'MA') {
+                const half = markSize * 0.6;
+                ctx.moveTo(cx - half, cy - half); ctx.lineTo(cx + half, cy + half);
+                ctx.moveTo(cx + half, cy - half); ctx.lineTo(cx - half, cy + half);
+            }
+            ctx.stroke();
+        };
+        if (props['TR']) props['TR'].forEach(c => drawShapeAt(c, 'TR'));
+        if (props['CR']) props['CR'].forEach(c => drawShapeAt(c, 'CR'));
+        if (props['SQ']) props['SQ'].forEach(c => drawShapeAt(c, 'SQ'));
+        if (props['MA']) props['MA'].forEach(c => drawShapeAt(c, 'MA'));
+    }
+}
+
+function showToast(msg) {
+    const el = document.getElementById('statusMsg');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    window.app = new App();
+});
+</script>
+</body>
+</html>
