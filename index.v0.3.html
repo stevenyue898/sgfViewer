@@ -499,22 +499,60 @@ class App {
     handleFileLoad(event) {
         const file = event.target.files[0];
         if (!file) return;
+
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
-                const sgfText = e.target.result;
+                // 获取二进制数据
+                const buffer = e.target.result;
+                let sgfText = null;
+
+                // 1. 【优先尝试 UTF-8】
+                // 使用 { fatal: true } 选项：如果发现非法的 UTF-8 序列（比如 GBK 编码的字节），会抛出错误
+                try {
+                    const decoderUtf8 = new TextDecoder('utf-8', { fatal: true });
+                    sgfText = decoderUtf8.decode(buffer);
+                } catch (utf8Error) {
+                    console.log("检测到非 UTF-8 编码，尝试使用 GBK 解码...");
+                    
+                    // 2. 【回退尝试 GBK】
+                    // GBK 是中文常用的编码，完全兼容 GB2312
+                    // 注意：大多数现代浏览器都支持 'gbk'
+                    try {
+                        const decoderGbk = new TextDecoder('gbk');
+                        sgfText = decoderGbk.decode(buffer);
+                    } catch (gbkError) {
+                        showToast("文件编码无法识别，请确保是 UTF-8 或 GBK");
+                        return;
+                    }
+                }
+
+                console.log("编码检测完成，开始解析...");
+                
+                // 继续使用原有的解析逻辑
                 const root = this.parser.parse(sgfText);
-                if (root) { this.loadGame(root); showToast("棋谱加载成功"); } 
-                else { throw new Error("解析返回空结果"); }
+                
+                if (root) {
+                    this.loadGame(root);
+                    showToast("棋谱加载成功");
+                } else {
+                    throw new Error("解析返回空结果");
+                }
+
             } catch (err) {
                 console.error("加载失败:", err);
                 showToast("加载失败: " + err.message);
+                // 失败时重置，防止显示旧数据
                 this.reset();
             }
+            // 清空 input 允许重复加载同一文件
             event.target.value = ''; 
         };
-        reader.readAsText(file);
+        
+        // 修改：改为读取二进制流
+        reader.readAsArrayBuffer(file);
     }
+
 
     loadGame(root) {
         this.rootNode = root;
