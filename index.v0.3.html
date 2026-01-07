@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>本地围棋打谱工具 (V0.3 修正版)</title>
+    <title>本地围棋打谱工具 (V0.31 修正版)</title>
     <style>
         :root {
             --bg-color: #f4f4f4;
@@ -971,7 +971,8 @@ class App {
         if (!s || s.length < 2) return [-1, -1];
         const x = s.charCodeAt(0) - 97;
         const sgfY = s.charCodeAt(1) - 97;
-        const y = this.boardSize - 1 - sgfY; 
+        //const y = this.boardSize - 1 - sgfY;  //导致上下颠倒
+		 const y = sgfY
         if (x < 0 || x >= this.boardSize || y < 0 || y >= this.boardSize) return [-1, -1];
         return [x, y];
     }
