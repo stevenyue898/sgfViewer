@@ -1018,7 +1018,8 @@ class App {
     updateGameInfo(node) {
         const props = node.properties;
         const getVal = (key) => props[key] ? props[key][0] : '-';
-        document.getElementById('infoEvent').textContent = getVal('EV') || getVal('EVENT');
+		 document.getElementById('infoEvent').textContent = getVal('EV') || getVal('EVENT');
+		 if (getVal('EV')=='-'){ document.getElementById('infoEvent').textContent = getVal('GN') || getVal('EVENT');}
         document.getElementById('infoBlack').textContent = (getVal('PB') || getVal('BLACK')) + (getVal('BR') ? ` (${getVal('BR')})` : '');
         document.getElementById('infoWhite').textContent = (getVal('PW') || getVal('WHITE')) + (getVal('WR') ? ` (${getVal('WR')})` : '');
         document.getElementById('infoResult').textContent = getVal('RE') || getVal('RESULT');
